@@ -23,6 +23,7 @@ export async function connectToMongoDB() {
 const mongoClient = await connectToMongoDB();
 const db = mongoClient.db("wonderlust");
 const destinationCollection = db.collection("destination");
+const bookingCollection = db.collection("bookings");
 
 app.post("/add-destination", async (req, res) => {
   const data = req.body;
@@ -58,6 +59,12 @@ app.delete("/destination/:id", async (req, res) => {
     _id: new ObjectId(id),
   });
   res.json(result);
+});
+
+app.post("/booking", async (req, res) => {
+  const data = req.body;
+  const result = await bookingCollection.insertOne(data);
+  res.send(result);
 });
 
 app.get("/", (req, res) => {
