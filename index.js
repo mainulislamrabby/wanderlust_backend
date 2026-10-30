@@ -2,6 +2,7 @@ import express from "express";
 import { MongoClient, ObjectId } from "mongodb";
 import "dotenv/config";
 import cors from "cors";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 const app = express();
 const PORT = 5000;
@@ -25,17 +26,30 @@ const db = mongoClient.db("wonderlust");
 const destinationCollection = db.collection("destination");
 const bookingCollection = db.collection("bookings");
 
-const verifyApi = (req, res, next) => {
+const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
-  console.log(authHeader);
-  if (authHeader !== "user loged in") {
+  if (!authHeader) {
     return res.status(401).send({ message: "Unauthorized" });
   }
 
-  next();
+  const token = authHeader.split(" ")[1];
+  if (!token) {
+    return res.status(401).send({ message: "Unauthorized" });
+  }
+
+  const JWKS = createRemoteJWKSet(
+    new URL("http://localhost:3000/api/auth/jwks"),
+  );
+
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+    next();
+  } catch (error) {
+    return res.status(405).send({ message: "Server Error" });
+  }
 };
 
-app.post("/add-destination", async (req, res) => {
+app.post("/add-destination", verifyToken, async (req, res) => {
   const data = req.body;
   const result = await destinationCollection.insertOne(data);
   res.send(result);
@@ -46,7 +60,12 @@ app.get("/destinations", async (req, res) => {
   res.send(result);
 });
 
-app.get("/destination/:id", verifyApi, async (req, res) => {
+app.get("/featured-destinations", async (req, res) => {
+  const result = await destinationCollection.find().limit(5).toArray();
+  res.send(result);
+});
+
+app.get("/destination/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
   const result = await destinationCollection.findOne({
     _id: new ObjectId(id),
@@ -55,7 +74,7 @@ app.get("/destination/:id", verifyApi, async (req, res) => {
   res.send(result);
 });
 
-app.patch("/destination/:id", async (req, res) => {
+app.patch("/destination/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
   const updateData = req.body;
   const result = await destinationCollection.updateOne(
@@ -65,7 +84,7 @@ app.patch("/destination/:id", async (req, res) => {
   res.json(result);
 });
 
-app.delete("/destination/:id", async (req, res) => {
+app.delete("/destination/:id", verifyToken, async (req, res) => {
   const { id } = req.params;
   const result = await destinationCollection.deleteOne({
     _id: new ObjectId(id),
@@ -79,7 +98,7 @@ app.post("/booking", async (req, res) => {
   res.send(result);
 });
 
-app.get("/my-bookings/:email", async (req, res) => {
+app.get("/my-bookings/:email", verifyToken, async (req, res) => {
   const { email } = req.params;
   const result = await bookingCollection.find({ email: email }).toArray();
   res.send(result);
